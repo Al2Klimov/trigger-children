@@ -5,17 +5,17 @@ use std::io::{stderr, stdin, BufRead, Result as IoResult, Write};
 use std::process::exit;
 use ureq::get;
 
-fn main() -> IoResult<()> {
-    const PIPELINE: &str =
-        r"\A(https?://[-.0-9a-zA-Z]+)/([-./0-9a-zA-Z]+?)(?:/-)?/pipelines/(\d+)\s*\z";
+const PIPELINE: &str =
+    r"\A(https?://[-.0-9a-zA-Z]+)/([-./0-9a-zA-Z]+?)(?:/-)?/pipelines/(\d+)\s*\z";
 
+fn main() -> IoResult<()> {
     let mut std_err = stderr().lock();
-    let mut parent = String::new();
+    let mut parent_url = String::new();
 
     write!(std_err, "GitLab parent pipeline URL: ")?;
-    stdin().lock().read_line(&mut parent)?;
+    stdin().lock().read_line(&mut parent_url)?;
 
-    let (gitlab, project, id) = match Regex::new(PIPELINE).unwrap().captures(parent.as_str()) {
+    let parent = match PipelineUrl::parse(&parent_url) {
         None => {
             writeln!(
                 std_err,
@@ -25,11 +25,7 @@ fn main() -> IoResult<()> {
 
             exit(1);
         }
-        Some(cap) => (
-            cap.get(1).unwrap().as_str(),
-            cap.get(2).unwrap().as_str(),
-            cap.get(3).unwrap().as_str(),
-        ),
+        Some(v) => v,
     };
 
     write!(std_err, "GitLab API token with api scope:")?;
@@ -38,12 +34,13 @@ fn main() -> IoResult<()> {
 
     let url = format!(
         "{}/api/v4/projects/{}/pipelines/{}/bridges?scope[]=running",
-        gitlab,
-        project.replace("/", "%2F"),
-        id
+        parent.gitlab, parent.project, parent.id
     );
 
-    match get(url.clone()).header("PRIVATE-TOKEN", token).call() {
+    match get(url.clone())
+        .header("PRIVATE-TOKEN", token.clone())
+        .call()
+    {
         Err(err) => {
             writeln!(std_err, "GET {}: {}", url, err)?;
             exit(1);
@@ -55,13 +52,74 @@ fn main() -> IoResult<()> {
             }
             Ok(body) => {
                 for bridge in body {
-                    writeln!(std_err, "{}", bridge.downstream_pipeline.web_url)?;
+                    match PipelineUrl::parse(&bridge.downstream_pipeline.web_url) {
+                        None => {
+                            writeln!(
+                                std_err,
+                                "Invalid downstream pipeline URL, doesn't match pattern {}: {}",
+                                PIPELINE, bridge.downstream_pipeline.web_url
+                            )?;
+
+                            exit(1);
+                        }
+                        Some(child) => {
+                            let url = format!(
+                                "{}/api/v4/projects/{}/pipelines/{}/jobs?scope[]=manual",
+                                child.gitlab, child.project, child.id
+                            );
+
+                            match get(url.clone())
+                                .header("PRIVATE-TOKEN", token.clone())
+                                .call()
+                            {
+                                Err(err) => {
+                                    writeln!(std_err, "GET {}: {}", url, err)?;
+                                    exit(1);
+                                }
+                                Ok(mut resp) => match resp.body_mut().read_json::<Vec<Job>>() {
+                                    Err(err) => {
+                                        writeln!(
+                                            std_err,
+                                            "Got invalid JSON from GET {}: {}",
+                                            url, err
+                                        )?;
+
+                                        exit(1);
+                                    }
+                                    Ok(body) => {
+                                        for job in body {
+                                            writeln!(std_err, "{}", job.web_url)?;
+                                        }
+                                    }
+                                },
+                            }
+                        }
+                    }
                 }
             }
         },
     }
 
     Ok(())
+}
+
+struct PipelineUrl<'a> {
+    gitlab: &'a str,
+    project: String,
+    id: &'a str,
+}
+
+impl<'a> PipelineUrl<'a> {
+    fn parse(s: &'a String) -> Option<Self> {
+        match Regex::new(PIPELINE).unwrap().captures(s.as_str()) {
+            None => None,
+            Some(cap) => Some(Self {
+                gitlab: cap.get(1).unwrap().as_str(),
+                project: cap.get(2).unwrap().as_str().replace("/", "%2F"),
+                id: cap.get(3).unwrap().as_str(),
+            }),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -72,4 +130,10 @@ struct Bridge {
 #[derive(Deserialize)]
 struct DownstreamPipeline {
     web_url: String,
+}
+
+#[derive(Deserialize)]
+struct Job {
+    web_url: String,
+    id: u64,
 }
