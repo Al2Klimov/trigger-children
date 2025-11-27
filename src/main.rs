@@ -1,4 +1,5 @@
 use regex_lite::Regex;
+use rpassword::read_password;
 use std::io::{stderr, stdin, BufRead, Result as IoResult, Write};
 use std::process::exit;
 
@@ -28,6 +29,10 @@ fn main() -> IoResult<()> {
             cap.get(3).unwrap().as_str(),
         ),
     };
+
+    write!(std_err, "GitLab API token with api scope:")?;
+
+    let token = read_password()?;
 
     Ok(())
 }

@@ -8,3 +8,4 @@ authors = ["Alexander A. Klimov <aklimov@icinga.com>"]
 
 [dependencies]
 regex-lite = "0.1.8"
+rpassword = "7.4.0"
