@@ -33,7 +33,7 @@ fn main() -> IoResult<()> {
     let token = read_password()?;
 
     let url = format!(
-        "{}/api/v4/projects/{}/pipelines/{}/bridges?scope[]=running&scope[]=pending",
+        "{}/api/v4/projects/{}/pipelines/{}/bridges?scope[]=running&scope[]=pending&per_page=100",
         parent.gitlab, parent.project, parent.id
     );
 
