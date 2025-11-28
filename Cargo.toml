@@ -3,4 +3,17 @@ name = "trigger-children"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75.0"
+publish = false
 authors = ["Alexander A. Klimov <aklimov@icinga.com>"]
+
+[dependencies]
+regex-lite = "0.1.8"
+rpassword = "7.4.0"
+
+[dependencies.serde]
+version = "1.0.228"
+features = ["derive"]
+
+[dependencies.ureq]
+version = "3.1.4"
+features = ["json"]
