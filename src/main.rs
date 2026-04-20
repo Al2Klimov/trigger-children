@@ -3,6 +3,8 @@ use rpassword::read_password;
 use serde::Deserialize;
 use std::io::{stderr, stdin, BufRead, Result as IoResult, Write};
 use std::process::exit;
+use std::thread::sleep;
+use std::time::Duration;
 use ureq::{get, post};
 
 const PIPELINE: &str =
@@ -103,6 +105,7 @@ fn main() -> IoResult<()> {
                                                 }
                                                 Ok(_) => {
                                                     writeln!(std_err, "{}", job.web_url)?;
+                                                    sleep(Duration::from_secs(900));
                                                 }
                                             }
                                         }
